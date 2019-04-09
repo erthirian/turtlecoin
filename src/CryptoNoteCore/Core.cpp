@@ -39,6 +39,7 @@
 #include <Utilities/LicenseCanary.h>
 #include <Utilities/Container.h>
 
+#include <thread>
 #include <unordered_set>
 
 #include <WalletTypes.h>
@@ -192,11 +193,53 @@ const std::chrono::seconds OUTDATED_TRANSACTION_POLLING_INTERVAL = std::chrono::
 
 }
 
+void Core::TransactionValidatorThread()
+{
+  logger(Logging::INFO) << "Transaction Validator Started...";
+
+  while (m_transactionValidatorRun)
+  {
+    while (!m_transactionValidatorQueue.empty())
+    { 
+      TransactionValidatorState validatorState;
+
+      std::pair<CachedTransaction, bool> item = m_transactionValidatorQueue.dequeue();
+
+      CachedTransaction cachedTransaction = std::get<0>(item);
+      bool notify = std::get<1>(item);
+
+      auto transactionHash = cachedTransaction.getTransactionHash();
+
+      if (isTransactionValidForPool(cachedTransaction, validatorState)) {
+        if (!transactionPool->pushTransaction(std::move(cachedTransaction), std::move(validatorState))) {
+          logger(Logging::DEBUGGING) << "Failed to push transaction " << transactionHash << " to pool, already exists";
+          continue;
+        }
+
+        logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been added to pool";
+
+        if (notify)
+        {
+          notifyObservers(makeAddTransactionMessage({transactionHash}));
+        }
+
+        continue;
+      }
+
+      logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been added to pool";
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+}
+
 Core::Core(const Currency& currency, std::shared_ptr<Logging::ILogger> logger, Checkpoints&& checkpoints, System::Dispatcher& dispatcher,
            std::unique_ptr<IBlockchainCacheFactory>&& blockchainCacheFactory, std::unique_ptr<IMainChainStorage>&& mainchainStorage)
     : currency(currency), dispatcher(dispatcher), contextGroup(dispatcher), logger(logger, "Core"), checkpoints(std::move(checkpoints)),
       upgradeManager(new UpgradeManager()), blockchainCacheFactory(std::move(blockchainCacheFactory)),
       mainChainStorage(std::move(mainchainStorage)), initialized(false) {
+
+  m_transactionValidatorRun = true;
 
   upgradeManager->addMajorBlockVersion(BLOCK_MAJOR_VERSION_2, currency.upgradeHeight(BLOCK_MAJOR_VERSION_2));
   upgradeManager->addMajorBlockVersion(BLOCK_MAJOR_VERSION_3, currency.upgradeHeight(BLOCK_MAJOR_VERSION_3));
@@ -211,6 +254,7 @@ Core::Core(const Currency& currency, std::shared_ptr<Logging::ILogger> logger, C
 }
 
 Core::~Core() {
+  m_transactionValidatorRun = false;
   contextGroup.interrupt();
   contextGroup.wait();
 }
@@ -1462,31 +1506,19 @@ bool Core::addTransactionToPool(const BinaryArray& transactionBinaryArray) {
   }
 
   CachedTransaction cachedTransaction(std::move(transaction));
-  auto transactionHash = cachedTransaction.getTransactionHash();
 
-  if (!addTransactionToPool(std::move(cachedTransaction))) {
-    return false;
-  }
+  auto item = std::make_pair(cachedTransaction, true);
 
-  notifyObservers(makeAddTransactionMessage({transactionHash}));
+  m_transactionValidatorQueue.enqueue(item);
+
   return true;
 }
 
 bool Core::addTransactionToPool(CachedTransaction&& cachedTransaction) {
-  TransactionValidatorState validatorState;
+  auto item = std::make_pair(cachedTransaction, false);
 
-  if (!isTransactionValidForPool(cachedTransaction, validatorState)) {
-    return false;
-  }
+  m_transactionValidatorQueue.enqueue(item);
 
-  auto transactionHash = cachedTransaction.getTransactionHash();
-
-  if (!transactionPool->pushTransaction(std::move(cachedTransaction), std::move(validatorState))) {
-    logger(Logging::DEBUGGING) << "Failed to push transaction " << transactionHash << " to pool, already exists";
-    return false;
-  }
-
-  logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been added to pool";
   return true;
 }
 
@@ -2112,6 +2144,9 @@ void Core::load() {
   } else {
     logger(Logging::DEBUGGING) << "Blockchain storage and root segment are on the same height and chain";
   }
+
+  logger(Logging::INFO) << "Starting the Transaction Validator Thread...";
+  std::thread t1 = std::thread(&Core::TransactionValidatorThread, this);
 
   initialized = true;
 }

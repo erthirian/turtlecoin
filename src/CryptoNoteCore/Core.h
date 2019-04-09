@@ -7,6 +7,7 @@
 #include <ctime>
 #include <vector>
 #include <unordered_map>
+
 #include "BlockchainCache.h"
 #include "BlockchainMessages.h"
 #include "CachedBlock.h"
@@ -24,6 +25,7 @@
 #include <Logging/LoggerMessage.h>
 #include "MessageQueue.h"
 #include "TransactionValidatiorState.h"
+#include <Common/ThreadSafeQueue.h>
 
 #include <System/ContextGroup.h>
 
@@ -140,6 +142,10 @@ private:
   std::vector<IBlockchainCache*> chainsLeaves;
   std::unique_ptr<ITransactionPoolCleanWrapper> transactionPool;
   std::unordered_set<IBlockchainCache*> mainChainSet;
+
+  void Core::TransactionValidatorThread();
+  Common::ThreadSafeQueue<std::pair<CachedTransaction, bool>> m_transactionValidatorQueue;
+  bool m_transactionValidatorRun;
 
   std::string dataFolder;
 
