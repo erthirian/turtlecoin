@@ -655,6 +655,7 @@ bool RpcServer::on_send_raw_tx(const COMMAND_RPC_SEND_RAW_TX::request& req, COMM
   Crypto::Hash transactionHash = Crypto::cn_fast_hash(transactions.back().data(), transactions.back().size());
   logger(DEBUGGING) << "transaction " << transactionHash << " came in on_send_raw_tx";
 
+  /* We need to grab this and make this async */
   if (!m_core.addTransactionToPool(transactions.back())) {
     logger(DEBUGGING) << "[on_send_raw_tx]: tx verification failed";
     res.status = "Failed";

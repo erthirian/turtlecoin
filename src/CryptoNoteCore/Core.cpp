@@ -195,7 +195,7 @@ const std::chrono::seconds OUTDATED_TRANSACTION_POLLING_INTERVAL = std::chrono::
 
 void Core::TransactionValidatorThread()
 {
-  logger(Logging::INFO) << "Transaction Validator Started...";
+  logger(Logging::INFO) << "Transaction Validator Thread Started";
 
   while (m_transactionValidatorRun)
   {
@@ -203,30 +203,28 @@ void Core::TransactionValidatorThread()
     { 
       TransactionValidatorState validatorState;
 
-      std::pair<CachedTransaction, bool> item = m_transactionValidatorQueue.dequeue();
-
-      CachedTransaction cachedTransaction = std::get<0>(item);
-      bool notify = std::get<1>(item);
+      auto [cachedTransaction, errorCallback, successCallback] = m_transactionValidatorQueue.dequeue();
 
       auto transactionHash = cachedTransaction.getTransactionHash();
 
       if (isTransactionValidForPool(cachedTransaction, validatorState)) {
-        if (!transactionPool->pushTransaction(std::move(cachedTransaction), std::move(validatorState))) {
-          logger(Logging::DEBUGGING) << "Failed to push transaction " << transactionHash << " to pool, already exists";
-          continue;
-        }
-
-        logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been added to pool";
-
-        if (notify)
+        if (transactionPool->pushTransaction(std::move(cachedTransaction), std::move(validatorState))) 
         {
-          notifyObservers(makeAddTransactionMessage({transactionHash}));
+          logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been added to pool";
+
+          successCallback();
+        } else {
+          logger(Logging::DEBUGGING) << "Failed to push transaction " << transactionHash << " to pool, already exists";
+
+          errorCallback();
         }
-
-        continue;
       }
+      else
+      {
+        logger(Logging::DEBUGGING) << "Failed to push transaction " << transactionHash << " to pool, transaction not valid.";
 
-      logger(Logging::DEBUGGING) << "Transaction " << transactionHash << " has been added to pool";
+        errorCallback();
+      }
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -416,9 +414,8 @@ void Core::copyTransactionsToPool(IBlockchainCache* alt) {
       break;
     auto transactions = alt->getRawTransactions(alt->getTransactionHashes());
     for (auto& transaction : transactions) {
-      if (addTransactionToPool(std::move(transaction))) {
-        // TODO: send notification
-      }
+      CachedTransaction cachedTransaction(std::move(transaction));
+      m_transactionValidatorQueue.enqueue({cachedTransaction, []{}, []{}});
     }
     alt = alt->getParent();
   }
@@ -1290,9 +1287,9 @@ void Core::actualizePoolTransactions() {
     auto tx = pool.getTransaction(hash);
     pool.removeTransaction(hash);
 
-    if (!addTransactionToPool(std::move(tx))) {
+    m_transactionValidatorQueue.enqueue({std::move(tx), [this, hash](){
       notifyObservers(makeDelTransactionMessage({hash}, Messages::DeleteTransaction::Reason::NotActual));
-    }
+    }, []{}});
   }
 }
 
@@ -1496,6 +1493,7 @@ bool Core::getGlobalIndexesForRange(
     }
 }
 
+/* This method is called via the P2P code and RPC sendrawtransaction */
 bool Core::addTransactionToPool(const BinaryArray& transactionBinaryArray) {
   throwIfNotInitialized();
 
@@ -1507,17 +1505,12 @@ bool Core::addTransactionToPool(const BinaryArray& transactionBinaryArray) {
 
   CachedTransaction cachedTransaction(std::move(transaction));
 
-  auto item = std::make_pair(cachedTransaction, true);
+  auto transactionHash = cachedTransaction.getTransactionHash();
 
-  m_transactionValidatorQueue.enqueue(item);
-
-  return true;
-}
-
-bool Core::addTransactionToPool(CachedTransaction&& cachedTransaction) {
-  auto item = std::make_pair(cachedTransaction, false);
-
-  m_transactionValidatorQueue.enqueue(item);
+  m_transactionValidatorQueue.enqueue({cachedTransaction, []{}, [this, transactionHash]()
+    {
+      notifyObservers(makeAddTransactionMessage({transactionHash}));
+    }});
 
   return true;
 }
@@ -2146,7 +2139,8 @@ void Core::load() {
   }
 
   logger(Logging::INFO) << "Starting the Transaction Validator Thread...";
-  std::thread t1 = std::thread(&Core::TransactionValidatorThread, this);
+
+  m_transactionValidatorThread = std::thread(&Core::TransactionValidatorThread, this);
 
   initialized = true;
 }

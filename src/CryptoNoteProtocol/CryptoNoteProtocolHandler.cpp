@@ -419,6 +419,7 @@ int CryptoNoteProtocolHandler::handle_notify_new_transactions(int command, NOTIF
   } else {
       const auto it = std::remove_if(arg.txs.begin(), arg.txs.end(), [this, &context](const auto &tx)
       {
+            /* we need to grab this and make this async */
             bool failed = !this->m_core.addTransactionToPool(tx);
 
              if (failed)

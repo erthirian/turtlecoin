@@ -5,6 +5,7 @@
 
 #pragma once
 #include <ctime>
+#include <thread>
 #include <vector>
 #include <unordered_map>
 
@@ -143,9 +144,11 @@ private:
   std::unique_ptr<ITransactionPoolCleanWrapper> transactionPool;
   std::unordered_set<IBlockchainCache*> mainChainSet;
 
-  void Core::TransactionValidatorThread();
-  Common::ThreadSafeQueue<std::pair<CachedTransaction, bool>> m_transactionValidatorQueue;
+  void TransactionValidatorThread();
+  /* The pair is such that it's the CachedTransaction, Error Callback, and Success Callback */
+  Common::ThreadSafeQueue<std::tuple<CachedTransaction, std::function<void()>, std::function<void()>>> m_transactionValidatorQueue;
   bool m_transactionValidatorRun;
+  std::thread m_transactionValidatorThread;
 
   std::string dataFolder;
 
@@ -225,7 +228,6 @@ private:
 
   void transactionPoolCleaningProcedure();
   void updateBlockMedianSize();
-  bool addTransactionToPool(CachedTransaction&& cachedTransaction);
   bool isTransactionValidForPool(const CachedTransaction& cachedTransaction, TransactionValidatorState& validatorState);
 
   void initRootSegment();
