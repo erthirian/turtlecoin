@@ -31,6 +31,8 @@
 
 #include <CryptoNoteProtocol/CryptoNoteProtocolHandlerCommon.h>
 
+#include <future>
+
 #include <set>
 
 #include <System/Timer.h>
@@ -1507,12 +1509,22 @@ bool Core::addTransactionToPool(const BinaryArray& transactionBinaryArray) {
 
   auto transactionHash = cachedTransaction.getTransactionHash();
 
-  m_transactionValidatorQueue.enqueue({cachedTransaction, []{}, [this, transactionHash]()
-    {
-      notifyObservers(makeAddTransactionMessage({transactionHash}));
-    }});
+  std::promise<bool> poolAdditionStatus;
+  std::future<bool> additionSucceeded = poolAdditionStatus.get_future();
 
-  return true;
+  m_transactionValidatorQueue.enqueue({
+      cachedTransaction, 
+      [&poolAdditionStatus]{ /* Error callback */
+          poolAdditionStatus.set_value(false);
+      },
+      [this, transactionHash, &poolAdditionStatus]{ /* Success callback */
+          notifyObservers(makeAddTransactionMessage({transactionHash}));
+          poolAdditionStatus.set_value(true);
+      }
+  });
+
+  /* Block thread until transaction has been added to queue */
+  return additionSucceeded.get();
 }
 
 bool Core::isTransactionValidForPool(const CachedTransaction& cachedTransaction, TransactionValidatorState& validatorState) {
