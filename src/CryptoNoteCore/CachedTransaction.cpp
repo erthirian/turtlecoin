@@ -23,6 +23,8 @@
 using namespace Crypto;
 using namespace CryptoNote;
 
+CachedTransaction::CachedTransaction(){}
+
 CachedTransaction::CachedTransaction(Transaction&& transaction) : transaction(std::move(transaction)) {
 }
 

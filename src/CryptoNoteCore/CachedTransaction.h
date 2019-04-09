@@ -24,6 +24,7 @@ namespace CryptoNote {
 
 class CachedTransaction {
 public:
+  explicit CachedTransaction();
   explicit CachedTransaction(Transaction&& transaction);
   explicit CachedTransaction(const Transaction& transaction);
   explicit CachedTransaction(const BinaryArray& transactionBinaryArray);
