@@ -21,10 +21,15 @@
 #include <vector>
 #include <Common/MemoryInputStream.h>
 #include <Common/StringOutputStream.h>
+#include <Common/VectorOutputStream.h>
 #include "JsonInputStreamSerializer.h"
 #include "JsonOutputStreamSerializer.h"
 #include "KVBinaryInputStreamSerializer.h"
 #include "KVBinaryOutputStreamSerializer.h"
+
+#include <Serialization/BinaryInputStreamSerializer.h>
+#include <Serialization/BinaryOutputStreamSerializer.h>
+#include <Serialization/CryptoNoteSerialization.h>
 
 namespace Common {
 
@@ -129,6 +134,55 @@ bool loadFromBinaryKeyValue(T& v, const std::string& buf) {
   } catch (std::exception&) {
     return false;
   }
+}
+
+// throws exception if serialization failed
+template<class T>
+std::vector<uint8_t> toBinaryArray(const T& object) {
+  std::vector<uint8_t> ba;
+  Common::VectorOutputStream stream(ba);
+  BinaryOutputStreamSerializer serializer(stream);
+  serialize(const_cast<T&>(object), serializer);
+  return ba;
+}
+
+// noexcept
+template<class T>
+bool toBinaryArray(const T& object, std::vector<uint8_t>& binaryArray) {
+  try {
+    binaryArray = toBinaryArray(object);
+  } catch (std::exception&) {
+    return false;
+  }
+
+  return true;
+}
+
+template<>
+bool toBinaryArray(const std::vector<uint8_t>& object, std::vector<uint8_t>& binaryArray); 
+
+template<class T>
+T fromBinaryArray(const std::vector<uint8_t>& binaryArray) {
+  T object;
+  Common::MemoryInputStream stream(binaryArray.data(), binaryArray.size());
+  BinaryInputStreamSerializer serializer(stream);
+  serialize(object, serializer);
+  if (!stream.endOfStream()) { // check that all data was consumed
+    throw std::runtime_error("failed to unpack type");
+  }
+
+  return object;
+}
+
+template<class T>
+bool fromBinaryArray(T& object, const std::vector<uint8_t>& binaryArray) {
+  try {
+    object = fromBinaryArray<T>(binaryArray);
+  } catch (std::exception&) {
+    return false;
+  }
+
+  return true;
 }
 
 }
