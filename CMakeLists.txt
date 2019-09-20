@@ -1,7 +1,10 @@
 # We need 3.8 for set(CMAKE_CXX_STANDARD 17)
 cmake_minimum_required(VERSION 3.8)
 
+include(CheckCXXCompilerFlag)
+
 find_program(CCACHE_PROGRAM ccache)
+
 if (CCACHE_PROGRAM)
     message(STATUS "Found ccache package... Activating...")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
@@ -167,7 +170,13 @@ if (NOT MSVC)
     if ("${ARCH}" STREQUAL "default")
         set(ARCH_FLAG "")
     else ()
-        set(ARCH_FLAG "-march=${ARCH}")
+        CHECK_CXX_COMPILER_FLAG("-march=${ARCH}" HAVE_MARCH_FLAG)
+
+        if (HAVE_MARCH_FLAG)
+            set(ARCH_FLAG "-march=${ARCH}")
+        else()
+            set(ARCH_FLAG "")
+        endif()
     endif ()
 
     ## These options generate all those nice warnings we see while building
@@ -245,11 +254,19 @@ if (NOT MSVC)
 endif ()
 
 ## Go get us some static BOOST libraries
-set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
+if (NOT ANDROID)
+    set(Boost_USE_STATIC_LIBS ON)
+    set(Boost_USE_STATIC_RUNTIME ON)
+else()
+    set(Boost_NO_BOOST_CMAKE ON)
+endif()
+
 find_package(Boost REQUIRED COMPONENTS system filesystem thread date_time chrono regex serialization)
+
 message(STATUS "Boost Found: ${Boost_INCLUDE_DIRS}")
+
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+
 if (APPLE)
     set(Boost_LIBRARIES "${Boost_LIBRARIES}")
 elseif (NOT MSVC)
