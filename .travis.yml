@@ -69,13 +69,14 @@ matrix:
     osx_image: xcode10
     compiler: clang
     env:
-    - MATRIX_EVAL="CC=/usr/local/opt/llvm/bin/clang && CXX=/usr/local/opt/llvm/bin/clang++"
+    - MATRIX_EVAL="CC=/usr/local/opt/llvm@8/bin/clang && CXX=/usr/local/opt/llvm@8/bin/clang++"
     - LABEL="osx"
     - _DEPLOYABLE="true"
     - STRIP="strip"
 
   # Arm (aarch64) cross compile
   - os: linux
+    dist: trusty
     env:
     - MATRIX_EVAL="CC=aarch64-linux-gnu-gcc && CXX=aarch64-linux-gnu-g++"
     - LABEL="aarch64"
@@ -135,7 +136,7 @@ script:
 before_deploy:
 - if [[ "${TRAVIS_TAG}" == "" ]]; then export TRAVIS_TAG=${TRAVIS_COMMIT} ; fi
 - cd src
-- TARGETS="TurtleCoind miner zedwallet turtle-service zedwallet-beta cryptotest wallet-api"
+- TARGETS="TurtleCoind miner zedwallet turtle-service zedwallet-beta cryptotest wallet-api wallet-upgrader"
 - ${STRIP} ${TARGETS}
 - rm -rf turtlecoin-${TRAVIS_TAG}
 - mkdir turtlecoin-${TRAVIS_TAG}
