@@ -24,7 +24,8 @@ enum class BlockValidationError {
   PROOF_OF_WORK_TOO_WEAK,
   TRANSACTION_ABSENT_IN_POOL,
   TRANSACTION_DUPLICATES,
-  TRANSACTION_INCONSISTENCY
+  TRANSACTION_INCONSISTENCY,
+  TOO_MANY_TRANSACTIONS
 };
 
 // custom category:
@@ -58,6 +59,7 @@ public:
       case BlockValidationError::TRANSACTION_ABSENT_IN_POOL: return "Block's transaction is absent in transaction pool";
       case BlockValidationError::TRANSACTION_DUPLICATES: return "Block contains duplicate transaction hashes";
       case BlockValidationError::TRANSACTION_INCONSISTENCY: return "Block contains inconsisten transaction hashes";
+      case BlockValidationError::TOO_MANY_TRANSACTIONS: return "Max transactions per block has been hit";
       default: return "Unknown error";
     }
   }

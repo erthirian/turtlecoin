@@ -112,6 +112,9 @@ const uint64_t MAX_EXTRA_SIZE                                = 140000;
 const uint64_t MAX_EXTRA_SIZE_V2                             = 1024;
 const uint64_t MAX_EXTRA_SIZE_V2_HEIGHT                      = 640000;
 
+const uint64_t MAX_TRANSACTIONS_PER_BLOCK                    = 0;
+const uint64_t MAX_TRANSACTIONS_PER_BLOCK_HEIGHT             = 1020200;
+
 /* For new projects forked from this code base, the values immediately below
    should be changed to 0 to prevent issues with transaction processing 
    and other possible unexpected behavior */

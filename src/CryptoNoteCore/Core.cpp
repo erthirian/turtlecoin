@@ -1041,6 +1041,14 @@ std::error_code Core::addBlock(const CachedBlock& cachedBlock, RawBlock&& rawBlo
                    }
     );
 
+    if (blockIndex >= CryptoNote::parameters::MAX_TRANSACTIONS_PER_BLOCK_HEIGHT)
+    {
+        if (transactions.size() > CryptoNote::parameters::MAX_TRANSACTIONS_PER_BLOCK)
+        {
+            return error::BlockValidationError::TOO_MANY_TRANSACTIONS;
+        }
+    }
+
     /* Make sure that the rawBlock transaction hashes contain no duplicates */
     if (!Utilities::is_unique(transactionHashes.begin(), transactionHashes.end()))
     {
@@ -2539,13 +2547,22 @@ void Core::fillBlockTemplate(
       }
     };
 
+    int count = 0;
+
     /* First we're going to loop through transactions that have a fee:
        ie. the transactions that are paying to use the network */
     for (const auto &transaction : regularTransactions)
     {
+        /* Got enough transactions. */
+        if (count >= CryptoNote::parameters::MAX_TRANSACTIONS_PER_BLOCK)
+        {
+            break;
+        }
+
         if (addTransactionToBlockTemplate(transaction))
         {
             logger(Logging::TRACE) << "Transaction " << transaction.getTransactionHash() << " included in block template";
+            count++;
         }
         else
         {
@@ -2557,9 +2574,16 @@ void Core::fillBlockTemplate(
        pay anything to use the network */
     for (const auto &transaction : fusionTransactions)
     {
+        /* Got enough transactions. */
+        if (count >= CryptoNote::parameters::MAX_TRANSACTIONS_PER_BLOCK)
+        {
+            break;
+        }
+
         if (addTransactionToBlockTemplate(transaction))
         {
             logger(Logging::TRACE) << "Fusion transaction " << transaction.getTransactionHash() << " included in block template";
+            count++;
         }
     }
 }
